@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add Exergy - Canaan Avalon Miner",
+        "description": "Enter the IP address of your Canaan Avalon miner.",
+        "data": {
+          "host": "IP Address"
+        }
+      },
+      "name": {
+        "title": "Configure Miner",
+        "description": "Configure your miner at {ip}",
+        "data": {
+          "name": "Name",
+          "port": "Port",
+          "scan_interval": "Scan Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to miner. Please check the IP address and ensure the miner is online.",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This miner is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Miner Options",
+        "description": "Configure miner options",
+        "data": {
+          "port": "Port",
+          "scan_interval": "Scan Interval (seconds)"
+        }
+      }
+    }
+  }
+}

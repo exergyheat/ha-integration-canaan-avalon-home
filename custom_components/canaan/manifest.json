@@ -1,0 +1,12 @@
+{
+  "domain": "canaan",
+  "name": "Exergy - Canaan Avalon Home Miner",
+  "codeowners": ["@tronsington"],
+  "config_flow": true,
+  "documentation": "https://github.com/exergyheat/ha-integration-canaan-avalon-home",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/exergyheat/ha-integration-canaan-avalon-home/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

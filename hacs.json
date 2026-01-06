@@ -1,0 +1,7 @@
+{
+  "name": "Exergy - Canaan Avalon Home Miner",
+  "content_in_root": false,
+  "filename": "canaan",
+  "render_readme": true,
+  "homeassistant": "2023.1.0"
+}
