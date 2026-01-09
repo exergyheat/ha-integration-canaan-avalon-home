@@ -24,7 +24,12 @@ from .const import (
     MODEL_NAMES,
     MODEL_UNKNOWN,
 )
-from .coordinator import CanaanAPI, detect_model
+from .coordinator import (
+    CanaanAPI,
+    detect_model,
+    get_network_prefixes_from_ip,
+    scan_for_miners,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,12 +82,38 @@ class CanaanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._discovered_ip: str | None = None
         self._model_type: str | None = None
         self._model_name: str | None = None
+        self._discovered_devices: list[dict] = []
         self._errors: dict[str, str] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step - ask for IP address."""
+        """Handle the initial step - choose between scan and manual entry."""
+        if user_input is not None:
+            if user_input.get("setup_method") == "scan":
+                return await self.async_step_scan()
+            else:
+                return await self.async_step_manual()
+
+        # Show choice between scan and manual
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("setup_method", default="scan"): vol.In(
+                        {
+                            "scan": "Scan network for miners",
+                            "manual": "Enter IP address manually",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle manual IP entry step."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -109,9 +140,127 @@ class CanaanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
 
         return self.async_show_form(
-            step_id="user",
+            step_id="manual",
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
+        )
+
+    async def async_step_scan(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle network scan configuration step."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            network_prefix = user_input.get("network_prefix", "").strip()
+            
+            if not network_prefix:
+                errors["base"] = "invalid_network"
+            else:
+                # Perform the scan
+                try:
+                    self._discovered_devices = await scan_for_miners(
+                        network_prefix=network_prefix,
+                        port=user_input.get(CONF_PORT, DEFAULT_PORT),
+                        timeout=1.0,
+                    )
+                    
+                    if not self._discovered_devices:
+                        errors["base"] = "no_devices_found"
+                    else:
+                        # Filter out already configured devices
+                        configured_ips = {
+                            entry.data.get(CONF_IP)
+                            for entry in self._async_current_entries()
+                        }
+                        self._discovered_devices = [
+                            d for d in self._discovered_devices
+                            if d["ip"] not in configured_ips
+                        ]
+                        
+                        if not self._discovered_devices:
+                            errors["base"] = "all_devices_configured"
+                        else:
+                            return await self.async_step_pick_device()
+                            
+                except Exception:  # pylint: disable=broad-except
+                    _LOGGER.exception("Error during network scan")
+                    errors["base"] = "scan_failed"
+
+        # Try to determine a default network prefix from Home Assistant's network config
+        default_prefix = ""
+        try:
+            # Get the default network interface IP
+            if hasattr(self.hass, "config") and self.hass.config.api:
+                # Try to get from HA's configured URL or use a common default
+                pass
+        except Exception:
+            pass
+        
+        if not default_prefix:
+            default_prefix = "192.168.1"  # Common default
+
+        return self.async_show_form(
+            step_id="scan",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("network_prefix", default=default_prefix): str,
+                    vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "example": "192.168.1",
+            },
+        )
+
+    async def async_step_pick_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle device selection from scan results."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            selected_ip = user_input.get("device")
+            
+            # Find the selected device info
+            selected_device = next(
+                (d for d in self._discovered_devices if d["ip"] == selected_ip),
+                None
+            )
+            
+            if selected_device:
+                # Check if already configured (double-check)
+                await self.async_set_unique_id(selected_ip)
+                self._abort_if_unique_id_configured()
+                
+                # Store discovered info for next step
+                self._discovered_ip = selected_ip
+                self._model_type = selected_device["model_type"]
+                self._model_name = selected_device["model_name"]
+                
+                # Move to name step
+                return await self.async_step_name()
+            else:
+                errors["base"] = "device_not_found"
+
+        # Build device selection list
+        device_options = {
+            d["ip"]: f"{d['model_name']} ({d['ip']})"
+            for d in self._discovered_devices
+        }
+
+        return self.async_show_form(
+            step_id="pick_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): vol.In(device_options),
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "count": str(len(self._discovered_devices)),
+            },
         )
 
     async def async_step_name(

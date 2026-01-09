@@ -133,6 +133,90 @@ DEFAULT_DATA_NANO3S = {
 DEFAULT_DATA = DEFAULT_DATA_MINI3
 
 
+async def scan_for_miners(
+    network_prefix: str,
+    port: int = 4028,
+    timeout: float = 1.0,
+    max_concurrent: int = 50,
+) -> list[dict]:
+    """Scan a network subnet for Canaan Avalon miners.
+    
+    Args:
+        network_prefix: The network prefix (e.g., "192.168.1")
+        port: The port to scan (default 4028 for CGMiner API)
+        timeout: Connection timeout per host in seconds
+        max_concurrent: Maximum concurrent connection attempts
+    
+    Returns:
+        List of dicts with keys: ip, model_type, model_name
+    """
+    discovered = []
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def check_host(ip: str) -> dict | None:
+        """Check if a host is a Canaan miner."""
+        async with semaphore:
+            try:
+                # Try to connect to the port
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(ip, port),
+                    timeout=timeout
+                )
+                writer.close()
+                await writer.wait_closed()
+                
+                # Port is open, try to detect model
+                model_type, model_name = await detect_model(ip, port)
+                
+                if model_type != MODEL_UNKNOWN:
+                    _LOGGER.info(f"Discovered {model_name} at {ip}")
+                    return {
+                        "ip": ip,
+                        "model_type": model_type,
+                        "model_name": model_name,
+                    }
+                else:
+                    # Port open but not a recognized Canaan/Avalon miner - skip it
+                    _LOGGER.debug(f"Port {port} open at {ip} but not a recognized Avalon miner, skipping")
+                    return None
+                    
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                # Host not responding or port closed
+                return None
+            except Exception as err:
+                _LOGGER.debug(f"Error checking {ip}: {err}")
+                return None
+    
+    # Generate IP addresses for the subnet (1-254)
+    ips = [f"{network_prefix}.{i}" for i in range(1, 255)]
+    
+    # Scan all IPs concurrently
+    _LOGGER.info(f"Scanning {network_prefix}.0/24 for Canaan miners on port {port}...")
+    tasks = [check_host(ip) for ip in ips]
+    results = await asyncio.gather(*tasks)
+    
+    # Filter out None results
+    discovered = [r for r in results if r is not None]
+    
+    _LOGGER.info(f"Scan complete. Found {len(discovered)} miner(s)")
+    return discovered
+
+
+def get_network_prefixes_from_ip(ip_address: str) -> list[str]:
+    """Extract network prefix from an IP address (assumes /24 subnet).
+    
+    Args:
+        ip_address: An IP address like "192.168.1.100"
+    
+    Returns:
+        List containing the network prefix like ["192.168.1"]
+    """
+    parts = ip_address.split(".")
+    if len(parts) == 4:
+        return [".".join(parts[:3])]
+    return []
+
+
 class CanaanAPI:
     """Direct API communication with Canaan Avalon miners via TCP.
     
