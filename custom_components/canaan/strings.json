@@ -2,10 +2,32 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add Exergy - Canaan Avalon Miner",
+        "title": "Add Canaan Avalon Miner",
+        "description": "Choose how to add your miner.",
+        "data": {
+          "setup_method": "Setup Method"
+        }
+      },
+      "manual": {
+        "title": "Manual Setup",
         "description": "Enter the IP address of your Canaan Avalon miner.",
         "data": {
           "host": "IP Address"
+        }
+      },
+      "scan": {
+        "title": "Scan Network",
+        "description": "Enter your network prefix to scan for miners (e.g., {example}).",
+        "data": {
+          "network_prefix": "Network Prefix",
+          "port": "Port"
+        }
+      },
+      "pick_device": {
+        "title": "Select Miner",
+        "description": "Found {count} miner(s) on your network. Select the one you want to add.",
+        "data": {
+          "device": "Miner"
         }
       },
       "name": {
@@ -20,7 +42,12 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to miner. Please check the IP address and ensure the miner is online.",
-      "unknown": "Unexpected error occurred"
+      "unknown": "Unexpected error occurred",
+      "invalid_network": "Invalid network prefix. Please enter a valid prefix (e.g., 192.168.1).",
+      "no_devices_found": "No miners found on the network. Ensure your miners are powered on and connected.",
+      "all_devices_configured": "All discovered miners are already configured.",
+      "scan_failed": "Network scan failed. Please try again or use manual setup.",
+      "device_not_found": "Selected device not found. Please try again."
     },
     "abort": {
       "already_configured": "This miner is already configured"
