@@ -22,6 +22,7 @@ TERA_HASH_PER_SECOND = "TH/s"
 
 # Model Types
 MODEL_MINI3 = "mini3"
+MODEL_NANO3 = "nano3"
 MODEL_NANO3S = "nano3s"
 MODEL_Q = "q"
 MODEL_UNKNOWN = "unknown"
@@ -29,6 +30,7 @@ MODEL_UNKNOWN = "unknown"
 # Model display names
 MODEL_NAMES = {
     MODEL_MINI3: "Avalon Mini 3",
+    MODEL_NANO3: "Avalon Nano 3",
     MODEL_NANO3S: "Avalon Nano 3s",
     MODEL_Q: "Avalon Q",
     MODEL_UNKNOWN: "Avalon Miner",
@@ -152,3 +154,4 @@ MODELS_WITH_WORK_MODE = [MODEL_MINI3]  # Only Mini 3 has heating/mining/night mo
 MODELS_WITH_WORK_LEVEL = [MODEL_MINI3]  # Only Mini 3 has super/eco levels
 MODELS_WITH_Q_LEVELS = [MODEL_Q]  # Q uses workmode field for eco/standard/super levels
 MODELS_WITH_LED = [MODEL_NANO3S]
+MODELS_WITH_NANO3_LEVELS = [MODEL_NANO3, MODEL_NANO3S]  # Nano 3 and Nano 3s use Low/Mid/High

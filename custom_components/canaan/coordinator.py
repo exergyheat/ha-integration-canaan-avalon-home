@@ -19,6 +19,7 @@ from .const import (
     MODE_MAP_Q,
     MODEL_MINI3,
     MODEL_NAMES,
+    MODEL_NANO3,
     MODEL_NANO3S,
     MODEL_Q,
     MODEL_UNKNOWN,
@@ -127,6 +128,33 @@ DEFAULT_DATA_NANO3S = {
     "led_g": 0,
     "led_b": 0,
     "led_on": False,
+}
+
+# Default data structure for Nano 3 (original, without LED)
+DEFAULT_DATA_NANO3 = {
+    "hostname": None,
+    "mac": None,
+    "make": "Canaan",
+    "model": "Avalon Nano 3",
+    "model_type": MODEL_NANO3,
+    "ip": None,
+    "hashrate": 0.0,
+    "internal_temp": 0,
+    "output_temp": 0,
+    "max_temp": 0,
+    "avg_temp": 0,
+    "target_temp": 0,
+    "fan_rpm": 0,
+    "fan_percentage": 0,
+    "power": 0,
+    "state": "Unknown",
+    "mode": "Unknown",
+    "state_num": 0,
+    "mode_num": 0,
+    "soft_off": 0,
+    "elapsed": 0,
+    "serial": None,
+    "firmware": None,
 }
 
 # Legacy alias
@@ -272,8 +300,8 @@ class CanaanAPI:
         For Mini 3/Q: Uses JSON format {"command":"..."}
         For Nano 3s: Uses plain text format
         """
-        if self.model_type == MODEL_NANO3S:
-            # Nano 3s uses plain text commands
+        if self.model_type in (MODEL_NANO3, MODEL_NANO3S):
+            # Nano 3 / Nano 3s use plain text commands
             return await self._send_tcp(command, timeout)
         else:
             # Mini 3/Q uses JSON format
@@ -295,22 +323,22 @@ class CanaanAPI:
 
     async def set_work_mode(self, mode: int) -> bool:
         """Set work mode.
-        
+
         Mini 3/Q: 0=heating, 1=mining, 2=night
-        Nano 3s: 0=low, 1=mid, 2=high
+        Nano 3 / Nano 3s: 0=low, 1=mid, 2=high
         """
         try:
             command = f"ascset|0,workmode,set,{mode}"
             response = await self.send_raw_command(command)
-            return response is not None and "STATUS=S" in response if self.model_type == MODEL_NANO3S else response is not None
+            return response is not None and "STATUS=S" in response if self.model_type in (MODEL_NANO3, MODEL_NANO3S) else response is not None
         except Exception as err:
             _LOGGER.error(f"Failed to set work mode: {err}")
             return False
 
     async def set_work_level(self, level: int) -> bool:
         """Set work level (0=super, -1=eco). Mini 3/Q only."""
-        if self.model_type == MODEL_NANO3S:
-            _LOGGER.warning("Work level is not supported on Nano 3s")
+        if self.model_type in (MODEL_NANO3, MODEL_NANO3S):
+            _LOGGER.warning("Work level is not supported on Nano 3 / Nano 3s")
             return False
         try:
             command = f"ascset|0,worklevel,set,{level}"
@@ -394,22 +422,28 @@ async def detect_model(host: str, port: int) -> tuple[str, str]:
     
     if response:
         _LOGGER.debug(f"Version response from {host}: {response[:200]}")
-        
+
+        # Check for Nano 3 (original, non-s) — JSON format: "MODEL":"nano3", "PROD":"Avalonnano"
+        # Must check before Nano 3s to avoid false matches
+        if '"nano3"' in response or "Avalonnano" in response or "PROD=Avalonnano" in response:
+            _LOGGER.info(f"Detected Avalon Nano 3 at {host} via version command")
+            return MODEL_NANO3, "Avalon Nano 3"
+
         # Check for Nano 3s
-        if "PROD=Avalon Nano3s" in response or "Nano3s" in response:
+        if "PROD=Avalon Nano3s" in response or "Nano3s" in response or '"nano3s"' in response:
             _LOGGER.info(f"Detected Avalon Nano 3s at {host} via version command")
             return MODEL_NANO3S, "Avalon Nano 3s"
-        
+
         # Check for Q - be more thorough
         if "PROD=Avalon Q" in response or "MODEL=Q" in response or "HWTYPE=Q_" in response:
             _LOGGER.info(f"Detected Avalon Q at {host} via version command")
             return MODEL_Q, "Avalon Q"
-        
+
         # Check for Mini 3
         if "PROD=Avalon Mini" in response or "Mini3" in response:
             _LOGGER.info(f"Detected Avalon Mini 3 at {host} via version command")
             return MODEL_MINI3, "Avalon Mini 3"
-        
+
         # Check for other models in version response
         if "PROD=" in response:
             match = re.search(r'PROD=([^,|]+)', response)
@@ -434,6 +468,10 @@ async def detect_model(host: str, port: int) -> tuple[str, str]:
         if "Ver[Q-" in response or "CPU[K230]" in response or "HWTYPE=Q_" in response:
             _LOGGER.info(f"Detected Avalon Q at {host} via estats command")
             return MODEL_Q, "Avalon Q"
+        # Check for Nano 3 signature (must check before Nano 3s: "nano3-" vs "Nano3s-")
+        if "Ver[nano3-" in response:
+            _LOGGER.info(f"Detected Avalon Nano 3 at {host} via estats command")
+            return MODEL_NANO3, "Avalon Nano 3"
         # Check for Nano 3s signature
         if "Ver[Nano3s-" in response:
             _LOGGER.info(f"Detected Avalon Nano 3s at {host} via estats command")
@@ -611,6 +649,123 @@ class CanaanCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error(f"Error parsing Mini 3 stats: {err}")
         
+        return data
+
+    def _parse_stats_nano3(self, response: str) -> dict:
+        """Parse estats response for Nano 3.
+
+        The Nano 3 differs from the Nano 3s in two key ways:
+        - Uses Temp[N] for the board temperature (not ITemp[N])
+        - Uses WORKLEVEL[N] for performance level (not WORKMODE[N])
+        """
+        if hasattr(self, 'data') and self.data:
+            data = self.data.copy()
+        else:
+            data = DEFAULT_DATA_NANO3.copy()
+
+        data["ip"] = self.miner_ip
+        data["mac"] = f"canaan_{self.miner_ip.replace('.', '_')}"
+        data["model"] = self.model_name
+        data["model_type"] = self.model_type
+
+        try:
+            # Extract realtime hashrate (GHSspd) - convert GH/s to TH/s
+            match = re.search(r'GHSspd\[([\d.]+)\]', response)
+            if match:
+                data["hashrate"] = round(float(match.group(1)) / 1000, 2)
+
+            # Extract board temperature (Nano 3 uses Temp[], not ITemp[])
+            match = re.search(r'(?<!\w)Temp\[(-?\d+)\]', response)
+            if match:
+                temp = int(match.group(1))
+                data["internal_temp"] = temp if temp > -200 else 0
+
+            # Extract output temperature
+            match = re.search(r'OTemp\[(\d+)\]', response)
+            if match:
+                data["output_temp"] = int(match.group(1))
+
+            # Extract max temperature
+            match = re.search(r'TMax\[(\d+)\]', response)
+            if match:
+                data["max_temp"] = int(match.group(1))
+
+            # Extract average temperature
+            match = re.search(r'TAvg\[(\d+)\]', response)
+            if match:
+                data["avg_temp"] = int(match.group(1))
+
+            # Extract target temperature
+            match = re.search(r'TarT\[(\d+)\]', response)
+            if match:
+                data["target_temp"] = int(match.group(1))
+
+            # Extract fan RPM
+            match = re.search(r'Fan1\[(\d+)\]', response)
+            if match:
+                data["fan_rpm"] = int(match.group(1))
+
+            # Extract fan percentage
+            match = re.search(r'FanR\[(\d+)%?\]', response)
+            if match:
+                data["fan_percentage"] = int(match.group(1))
+
+            # Extract power from PS array (last value is watts)
+            match = re.search(r'PS\[[\d\s]+\s(\d+)\]', response)
+            if match:
+                data["power"] = int(match.group(1))
+
+            # Extract performance level — Nano 3 uses WORKLEVEL (0=Low, 1=Mid, 2=High)
+            match = re.search(r'WORKLEVEL\[(\d+)\]', response)
+            if match:
+                mode_num = int(match.group(1))
+                data["mode_num"] = mode_num
+                data["mode"] = MODE_MAP_NANO3S.get(mode_num, "Unknown")
+            else:
+                _LOGGER.debug(
+                    f"WORKLEVEL not found in Nano 3 response from {self.miner_ip}, "
+                    f"preserving previous value: {data.get('mode')}"
+                )
+
+            # Extract soft off state
+            match = re.search(r'SoftOFF\[(\d+)\]', response)
+            if match:
+                data["soft_off"] = int(match.group(1))
+
+            # Determine mining state
+            if "Work: In Work" in response:
+                data["state_num"] = 1
+                data["state"] = "Working"
+            elif "Work: In Idle" in response or "Work: Idle" in response or "Work: Off" in response:
+                data["state_num"] = 2
+                data["state"] = "Idle"
+            else:
+                if data.get("hashrate", 0) > 0:
+                    data["state_num"] = 1
+                    data["state"] = "Working"
+                else:
+                    data["state_num"] = 2
+                    data["state"] = "Idle"
+
+            # Extract elapsed time (uptime in seconds)
+            match = re.search(r'Elapsed\[(\d+)\]', response)
+            if match:
+                data["elapsed"] = int(match.group(1))
+
+            # Extract DNA (serial number)
+            match = re.search(r'DNA\[([^\]]+)\]', response)
+            if match:
+                data["serial"] = match.group(1)
+                data["mac"] = f"canaan_{match.group(1)}"
+
+            # Extract firmware version
+            match = re.search(r'Ver\[([^\]]+)\]', response)
+            if match:
+                data["firmware"] = match.group(1)
+
+        except Exception as err:
+            _LOGGER.error(f"Error parsing Nano 3 stats: {err}")
+
         return data
 
     def _parse_stats_nano3s(self, response: str) -> dict:
@@ -889,7 +1044,9 @@ class CanaanCoordinator(DataUpdateCoordinator):
 
     def _parse_stats(self, response: str) -> dict:
         """Parse stats response based on model type."""
-        if self.model_type == MODEL_NANO3S:
+        if self.model_type == MODEL_NANO3:
+            return self._parse_stats_nano3(response)
+        elif self.model_type == MODEL_NANO3S:
             return self._parse_stats_nano3s(response)
         elif self.model_type == MODEL_Q:
             return self._parse_stats_q(response)
@@ -898,7 +1055,9 @@ class CanaanCoordinator(DataUpdateCoordinator):
 
     def _get_default_data(self) -> dict:
         """Get default data structure based on model type."""
-        if self.model_type == MODEL_NANO3S:
+        if self.model_type == MODEL_NANO3:
+            data = DEFAULT_DATA_NANO3.copy()
+        elif self.model_type == MODEL_NANO3S:
             data = DEFAULT_DATA_NANO3S.copy()
         elif self.model_type == MODEL_Q:
             data = DEFAULT_DATA_Q.copy()
