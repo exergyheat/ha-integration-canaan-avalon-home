@@ -151,4 +151,5 @@ LED_EFFECT_MAP = {
 MODELS_WITH_WORK_MODE = [MODEL_MINI3]  # Only Mini 3 has heating/mining/night modes
 MODELS_WITH_WORK_LEVEL = [MODEL_MINI3]  # Only Mini 3 has super/eco levels
 MODELS_WITH_Q_LEVELS = [MODEL_Q]  # Q uses workmode field for eco/standard/super levels
+MODELS_WITH_NANO3_LEVELS = [MODEL_NANO3S]  # Nano 3S has Low/Mid/High work modes
 MODELS_WITH_LED = [MODEL_NANO3S]

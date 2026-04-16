@@ -18,6 +18,7 @@ from .const import (
     MODEL_NANO3S,
     MODEL_Q,
     MODELS_WITH_LED,
+    MODELS_WITH_NANO3_LEVELS,
     MODELS_WITH_Q_LEVELS,
     MODELS_WITH_WORK_LEVEL,
     MODELS_WITH_WORK_MODE,
@@ -41,8 +42,8 @@ async def async_setup_entry(
 
     entities = []
     
-    # Add work mode selector for models that support it (Mini 3 only - heating/mining/night)
-    if model_type in MODELS_WITH_WORK_MODE:
+    # Add work mode selector for models that support it (Mini 3: heating/mining/night; Nano 3S: Low/Mid/High)
+    if model_type in MODELS_WITH_WORK_MODE or model_type in MODELS_WITH_NANO3_LEVELS:
         entities.append(CanaanWorkModeSelect(coordinator))
     
     # Add work level selector for Mini 3 (Super/Eco)
