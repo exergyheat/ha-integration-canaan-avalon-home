@@ -15,9 +15,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     LED_EFFECTS,
+    MODEL_NANO3,
     MODEL_NANO3S,
     MODEL_Q,
     MODELS_WITH_LED,
+    MODELS_WITH_NANO3_LEVELS,
     MODELS_WITH_Q_LEVELS,
     MODELS_WITH_WORK_LEVEL,
     MODELS_WITH_WORK_MODE,
@@ -41,8 +43,9 @@ async def async_setup_entry(
 
     entities = []
     
-    # Add work mode selector for models that support it (Mini 3 only - heating/mining/night)
-    if model_type in MODELS_WITH_WORK_MODE:
+    # Add work mode selector for models that support it
+    # Mini 3: heating/mining/night; Nano 3 and Nano 3s: low/mid/high
+    if model_type in MODELS_WITH_WORK_MODE or model_type in MODELS_WITH_NANO3_LEVELS:
         entities.append(CanaanWorkModeSelect(coordinator))
     
     # Add work level selector for Mini 3 (Super/Eco)
@@ -74,7 +77,7 @@ class CanaanWorkModeSelect(CoordinatorEntity, SelectEntity):
         
         # Set options based on model type
         self._model_type = coordinator.model_type
-        if self._model_type == MODEL_NANO3S:
+        if self._model_type in (MODEL_NANO3, MODEL_NANO3S):
             self._work_modes = WORK_MODES_NANO3S
         else:
             self._work_modes = WORK_MODES_MINI3

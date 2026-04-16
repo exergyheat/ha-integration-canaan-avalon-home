@@ -12,7 +12,7 @@ from homeassistant.helpers import entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MODEL_NANO3S, MODEL_Q
+from .const import DOMAIN, MODEL_NANO3, MODEL_NANO3S, MODEL_Q
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ async def async_setup_entry(
 
     entities = []
     
-    # Power switch for Mini 3 and Q (not supported on Nano 3s)
-    if model_type != MODEL_NANO3S:
+    # Power switch for Mini 3 and Q (not supported on Nano 3 / Nano 3s)
+    if model_type not in (MODEL_NANO3, MODEL_NANO3S):
         entities.append(CanaanPowerSwitch(coordinator))
 
     async_add_entities(entities)
