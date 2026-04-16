@@ -23,7 +23,7 @@ from homeassistant.helpers import entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MODEL_MINI3, MODEL_NANO3S, MODEL_Q, TERA_HASH_PER_SECOND
+from .const import DOMAIN, MODEL_MINI3, MODEL_NANO3, MODEL_NANO3S, MODEL_Q, TERA_HASH_PER_SECOND
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -241,8 +241,8 @@ async def async_setup_entry(
         )
 
     # Add model-specific sensors
-    if model_type == MODEL_NANO3S:
-        # Nano 3s specific sensors
+    if model_type in (MODEL_NANO3, MODEL_NANO3S):
+        # Nano 3 and Nano 3s share the same sensor set
         for sensor_key, description in SENSOR_TYPES_NANO3S.items():
             entities.append(
                 CanaanSensor(
